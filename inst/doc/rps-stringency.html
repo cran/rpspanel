@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Measuring RPS stringency</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Measuring RPS stringency</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(rpspanel)</span></code></pre></div>
+<p>Many studies code a Renewable Portfolio Standard (RPS) as a yes/no
+dummy. Real policies differ in targets, timelines, covered utilities,
+eligible resources, carve-outs and out-of-state flexibility.
+<code>rps_stringency()</code> turns coded rules into comparable annual
+measures.</p>
+<div id="the-rule-coding" class="section level2">
+<h2>The rule coding</h2>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>rules <span class="ot">&lt;-</span> <span class="fu">rps_rules</span>()</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>rules</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; &lt;rps_rules&gt;: 51 coded states (33 with an RPS), 273 legal targets</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt;  state enacted_year first_compliance_year target_type final_target</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt;     AZ         2006                  2006       share         0.15</span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt;     CA         2002                  2003       share          0.6</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt;     CO         2004                  2007       share          0.3</span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt;     CT         1998                  2001       share         0.29</span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt;     DC         2005                  2007       share            1</span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt;     DE         2005                  2007       share          0.4</span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt;     HI         2004                  2005       share            1</span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt;     IA         1983                  1983 capacity_mw          105</span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt;     IL         2007                  2008       share          0.5</span></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt;     KS         2009                  2011       share       0.0726</span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt;     MA         1997                  2003       share          0.4</span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt;     MD         2004                  2006       share          0.5</span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co">#&gt;     ME         1997                  2000       share          0.6</span></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="co">#&gt;     MI         2008                  2012       share          0.6</span></span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a><span class="co">#&gt;     MN         2007                  2010       share         0.55</span></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a><span class="co">#&gt;     MO         2008                  2011       share         0.15</span></span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a><span class="co">#&gt;     MT         2005                  2008       share         0.15</span></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co">#&gt;     NC         2007                  2012       share        0.125</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co">#&gt;     NH         2007                  2008       share        0.157</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a><span class="co">#&gt;     NJ         1999                  2002       share          0.5</span></span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a><span class="co">#&gt;     NM         2004                  2006       share          0.8</span></span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a><span class="co">#&gt;     NV         1997                  2003       share          0.5</span></span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a><span class="co">#&gt;     NY         2004                  2006       share          0.7</span></span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a><span class="co">#&gt;     OH         2008                  2009       share        0.085</span></span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a><span class="co">#&gt;     OR         2007                  2011       share          0.5</span></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a><span class="co">#&gt;     PA         2004                  2007       share         0.08</span></span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a><span class="co">#&gt;     RI         2004                  2007       share         0.98</span></span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a><span class="co">#&gt;     TX         1999                  2002 capacity_mw         5880</span></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a><span class="co">#&gt;     VA         2020                  2021       share            1</span></span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a><span class="co">#&gt;     VT         2015                  2017       share            1</span></span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a><span class="co">#&gt;     WA         2006                  2012       share         0.15</span></span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a><span class="co">#&gt;     WI         1999                  2006       share          0.1</span></span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a><span class="co">#&gt;     WV         2009                  2015       share         0.25</span></span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a><span class="co">#&gt;  final_target_year coverage_share</span></span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a><span class="co">#&gt;               2025          0.589</span></span>
+<span id="cb2-40"><a href="#cb2-40" tabindex="-1"></a><span class="co">#&gt;               2030          0.985</span></span>
+<span id="cb2-41"><a href="#cb2-41" tabindex="-1"></a><span class="co">#&gt;               2020          0.990</span></span>
+<span id="cb2-42"><a href="#cb2-42" tabindex="-1"></a><span class="co">#&gt;               2030          1.000</span></span>
+<span id="cb2-43"><a href="#cb2-43" tabindex="-1"></a><span class="co">#&gt;               2032          1.000</span></span>
+<span id="cb2-44"><a href="#cb2-44" tabindex="-1"></a><span class="co">#&gt;               2035          0.918</span></span>
+<span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a><span class="co">#&gt;               2045          1.000</span></span>
+<span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a><span class="co">#&gt;               1983          0.862</span></span>
+<span id="cb2-47"><a href="#cb2-47" tabindex="-1"></a><span class="co">#&gt;               2040          0.929</span></span>
+<span id="cb2-48"><a href="#cb2-48" tabindex="-1"></a><span class="co">#&gt;               2014          0.825</span></span>
+<span id="cb2-49"><a href="#cb2-49" tabindex="-1"></a><span class="co">#&gt;               2030          0.887</span></span>
+<span id="cb2-50"><a href="#cb2-50" tabindex="-1"></a><span class="co">#&gt;               2030          0.980</span></span>
+<span id="cb2-51"><a href="#cb2-51" tabindex="-1"></a><span class="co">#&gt;               2040          0.956</span></span>
+<span id="cb2-52"><a href="#cb2-52" tabindex="-1"></a><span class="co">#&gt;               2035          1.000</span></span>
+<span id="cb2-53"><a href="#cb2-53" tabindex="-1"></a><span class="co">#&gt;               2035          0.999</span></span>
+<span id="cb2-54"><a href="#cb2-54" tabindex="-1"></a><span class="co">#&gt;               2021          0.726</span></span>
+<span id="cb2-55"><a href="#cb2-55" tabindex="-1"></a><span class="co">#&gt;               2015          0.742</span></span>
+<span id="cb2-56"><a href="#cb2-56" tabindex="-1"></a><span class="co">#&gt;               2021          0.998</span></span>
+<span id="cb2-57"><a href="#cb2-57" tabindex="-1"></a><span class="co">#&gt;               2025          1.000</span></span>
+<span id="cb2-58"><a href="#cb2-58" tabindex="-1"></a><span class="co">#&gt;               2030          0.990</span></span>
+<span id="cb2-59"><a href="#cb2-59" tabindex="-1"></a><span class="co">#&gt;               2040          0.902</span></span>
+<span id="cb2-60"><a href="#cb2-60" tabindex="-1"></a><span class="co">#&gt;               2030          0.929</span></span>
+<span id="cb2-61"><a href="#cb2-61" tabindex="-1"></a><span class="co">#&gt;               2030          0.983</span></span>
+<span id="cb2-62"><a href="#cb2-62" tabindex="-1"></a><span class="co">#&gt;               2026          0.734</span></span>
+<span id="cb2-63"><a href="#cb2-63" tabindex="-1"></a><span class="co">#&gt;               2040          0.808</span></span>
+<span id="cb2-64"><a href="#cb2-64" tabindex="-1"></a><span class="co">#&gt;               2021          0.976</span></span>
+<span id="cb2-65"><a href="#cb2-65" tabindex="-1"></a><span class="co">#&gt;               2033          0.991</span></span>
+<span id="cb2-66"><a href="#cb2-66" tabindex="-1"></a><span class="co">#&gt;               2015          0.757</span></span>
+<span id="cb2-67"><a href="#cb2-67" tabindex="-1"></a><span class="co">#&gt;               2045          0.722</span></span>
+<span id="cb2-68"><a href="#cb2-68" tabindex="-1"></a><span class="co">#&gt;               2035          1.000</span></span>
+<span id="cb2-69"><a href="#cb2-69" tabindex="-1"></a><span class="co">#&gt;               2020          0.874</span></span>
+<span id="cb2-70"><a href="#cb2-70" tabindex="-1"></a><span class="co">#&gt;               2015          1.000</span></span>
+<span id="cb2-71"><a href="#cb2-71" tabindex="-1"></a><span class="co">#&gt;               2025          0.994</span></span>
+<span id="cb2-72"><a href="#cb2-72" tabindex="-1"></a><span class="fu">head</span>(rules<span class="sc">$</span>targets)</span>
+<span id="cb2-73"><a href="#cb2-73" tabindex="-1"></a><span class="co">#&gt;   state year target</span></span>
+<span id="cb2-74"><a href="#cb2-74" tabindex="-1"></a><span class="co">#&gt; 1    AZ 2006 0.0125</span></span>
+<span id="cb2-75"><a href="#cb2-75" tabindex="-1"></a><span class="co">#&gt; 2    AZ 2009 0.0200</span></span>
+<span id="cb2-76"><a href="#cb2-76" tabindex="-1"></a><span class="co">#&gt; 3    AZ 2010 0.0250</span></span>
+<span id="cb2-77"><a href="#cb2-77" tabindex="-1"></a><span class="co">#&gt; 4    AZ 2015 0.0500</span></span>
+<span id="cb2-78"><a href="#cb2-78" tabindex="-1"></a><span class="co">#&gt; 5    AZ 2025 0.1500</span></span>
+<span id="cb2-79"><a href="#cb2-79" tabindex="-1"></a><span class="co">#&gt; 6    CA 2003 0.1185</span></span></code></pre></div>
+<p>Each RPS state has one row in <code>rules$rules</code> (enactment and
+first compliance year, target type, coverage share, design features,
+sources and notes) and one row per legal target in
+<code>rules$targets</code>. States missing from the coding are <em>not
+yet coded</em>, and get <code>NA</code> rather than zero.</p>
+<blockquote>
+<p><strong>Status.</strong> The bundled coding covers all 50 states and
+DC. Rows marked <code>verified = TRUE</code> have been checked against
+the statute, the DSIRE program page and the LBNL RPS &amp; CES data,
+with sources in the <code>source</code> and <code>notes</code> columns.
+Single-number simplifications (one coverage share, one schedule for
+states with utility-specific targets) are described in
+<code>notes</code>. Please report corrections. You can supply your own
+coding with
+<code>rps_rules(rules_path = ..., targets_path = ...)</code>.</p>
+</blockquote>
+</div>
+<div id="methods" class="section level2">
+<h2>Methods</h2>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>method</th>
+<th>column(s)</th>
+<th>definition</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>adoption</code></td>
+<td><code>rps_adoption</code></td>
+<td>1 if an RPS is in force</td>
+</tr>
+<tr class="even">
+<td><code>nominal</code></td>
+<td><code>rps_nominal</code></td>
+<td>required share of sales, interpolated between legal targets</td>
+</tr>
+<tr class="odd">
+<td><code>coverage_adjusted</code></td>
+<td><code>rps_coverage_adj</code></td>
+<td>nominal x share of sales covered</td>
+</tr>
+<tr class="even">
+<td><code>incremental</code></td>
+<td><code>rps_incremental</code>, <code>rps_baseline_share</code></td>
+<td>coverage-adjusted requirement minus the existing renewable share at
+enactment (Yin and Powers 2010)</td>
+</tr>
+<tr class="odd">
+<td><code>flexibility</code></td>
+<td><code>rps_oos_rec</code>, <code>rps_carveout</code>,
+<code>rps_acp</code></td>
+<td>design indicators while an RPS is in force</td>
+</tr>
+</tbody>
+</table>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>s <span class="ot">&lt;-</span> <span class="fu">rps_stringency</span>(<span class="dv">2000</span><span class="sc">:</span><span class="dv">2030</span>, <span class="at">states =</span> <span class="fu">c</span>(<span class="st">&quot;CA&quot;</span>, <span class="st">&quot;OR&quot;</span>, <span class="st">&quot;WA&quot;</span>, <span class="st">&quot;NC&quot;</span>, <span class="st">&quot;MA&quot;</span>))</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">head</span>(s[s<span class="sc">$</span>state <span class="sc">==</span> <span class="st">&quot;OR&quot;</span>, ], <span class="dv">15</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt;     state year rps_adoption rps_nominal rps_coverage_adj rps_incremental</span></span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a><span class="co">#&gt; 94     OR 2000            0       0.000           0.0000               0</span></span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a><span class="co">#&gt; 95     OR 2001            0       0.000           0.0000               0</span></span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a><span class="co">#&gt; 96     OR 2002            0       0.000           0.0000               0</span></span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a><span class="co">#&gt; 97     OR 2003            0       0.000           0.0000               0</span></span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a><span class="co">#&gt; 98     OR 2004            0       0.000           0.0000               0</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a><span class="co">#&gt; 99     OR 2005            0       0.000           0.0000               0</span></span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a><span class="co">#&gt; 100    OR 2006            0       0.000           0.0000               0</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a><span class="co">#&gt; 101    OR 2007            1       0.000           0.0000               0</span></span>
+<span id="cb3-12"><a href="#cb3-12" tabindex="-1"></a><span class="co">#&gt; 102    OR 2008            1       0.000           0.0000               0</span></span>
+<span id="cb3-13"><a href="#cb3-13" tabindex="-1"></a><span class="co">#&gt; 103    OR 2009            1       0.000           0.0000               0</span></span>
+<span id="cb3-14"><a href="#cb3-14" tabindex="-1"></a><span class="co">#&gt; 104    OR 2010            1       0.000           0.0000               0</span></span>
+<span id="cb3-15"><a href="#cb3-15" tabindex="-1"></a><span class="co">#&gt; 105    OR 2011            1       0.050           0.0404              NA</span></span>
+<span id="cb3-16"><a href="#cb3-16" tabindex="-1"></a><span class="co">#&gt; 106    OR 2012            1       0.075           0.0606              NA</span></span>
+<span id="cb3-17"><a href="#cb3-17" tabindex="-1"></a><span class="co">#&gt; 107    OR 2013            1       0.100           0.0808              NA</span></span>
+<span id="cb3-18"><a href="#cb3-18" tabindex="-1"></a><span class="co">#&gt; 108    OR 2014            1       0.125           0.1010              NA</span></span>
+<span id="cb3-19"><a href="#cb3-19" tabindex="-1"></a><span class="co">#&gt;     rps_baseline_share rps_oos_rec rps_carveout rps_acp</span></span>
+<span id="cb3-20"><a href="#cb3-20" tabindex="-1"></a><span class="co">#&gt; 94                  NA           0            0       0</span></span>
+<span id="cb3-21"><a href="#cb3-21" tabindex="-1"></a><span class="co">#&gt; 95                  NA           0            0       0</span></span>
+<span id="cb3-22"><a href="#cb3-22" tabindex="-1"></a><span class="co">#&gt; 96                  NA           0            0       0</span></span>
+<span id="cb3-23"><a href="#cb3-23" tabindex="-1"></a><span class="co">#&gt; 97                  NA           0            0       0</span></span>
+<span id="cb3-24"><a href="#cb3-24" tabindex="-1"></a><span class="co">#&gt; 98                  NA           0            0       0</span></span>
+<span id="cb3-25"><a href="#cb3-25" tabindex="-1"></a><span class="co">#&gt; 99                  NA           0            0       0</span></span>
+<span id="cb3-26"><a href="#cb3-26" tabindex="-1"></a><span class="co">#&gt; 100                 NA           0            0       0</span></span>
+<span id="cb3-27"><a href="#cb3-27" tabindex="-1"></a><span class="co">#&gt; 101                 NA           1            1       1</span></span>
+<span id="cb3-28"><a href="#cb3-28" tabindex="-1"></a><span class="co">#&gt; 102                 NA           1            1       1</span></span>
+<span id="cb3-29"><a href="#cb3-29" tabindex="-1"></a><span class="co">#&gt; 103                 NA           1            1       1</span></span>
+<span id="cb3-30"><a href="#cb3-30" tabindex="-1"></a><span class="co">#&gt; 104                 NA           1            1       1</span></span>
+<span id="cb3-31"><a href="#cb3-31" tabindex="-1"></a><span class="co">#&gt; 105                 NA           1            1       1</span></span>
+<span id="cb3-32"><a href="#cb3-32" tabindex="-1"></a><span class="co">#&gt; 106                 NA           1            1       1</span></span>
+<span id="cb3-33"><a href="#cb3-33" tabindex="-1"></a><span class="co">#&gt; 107                 NA           1            1       1</span></span>
+<span id="cb3-34"><a href="#cb3-34" tabindex="-1"></a><span class="co">#&gt; 108                 NA           1            1       1</span></span></code></pre></div>
+<div id="linear-or-step-interpolation" class="section level3">
+<h3>Linear or step interpolation</h3>
+<p>Legal schedules often step (for example Washington: 3% from 2012, 9%
+from 2016, 15% from 2020). <code>interpolation = &quot;step&quot;</code> follows
+the schedule exactly; <code>&quot;linear&quot;</code> (the default) spreads the
+ramp evenly between target years.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>lin  <span class="ot">&lt;-</span> <span class="fu">rps_stringency</span>(<span class="dv">2010</span><span class="sc">:</span><span class="dv">2022</span>, <span class="st">&quot;WA&quot;</span>, <span class="at">method =</span> <span class="st">&quot;nominal&quot;</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>step <span class="ot">&lt;-</span> <span class="fu">rps_stringency</span>(<span class="dv">2010</span><span class="sc">:</span><span class="dv">2022</span>, <span class="st">&quot;WA&quot;</span>, <span class="at">method =</span> <span class="st">&quot;nominal&quot;</span>, <span class="at">interpolation =</span> <span class="st">&quot;step&quot;</span>)</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="fu">plot</span>(lin<span class="sc">$</span>year, lin<span class="sc">$</span>rps_nominal, <span class="at">type =</span> <span class="st">&quot;l&quot;</span>, <span class="at">ylab =</span> <span class="st">&quot;Required share&quot;</span>, <span class="at">xlab =</span> <span class="st">&quot;&quot;</span>,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>     <span class="at">main =</span> <span class="st">&quot;Washington RPS&quot;</span>)</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a><span class="fu">lines</span>(step<span class="sc">$</span>year, step<span class="sc">$</span>rps_nominal, <span class="at">type =</span> <span class="st">&quot;s&quot;</span>, <span class="at">lty =</span> <span class="dv">2</span>)</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">&quot;topleft&quot;</span>, <span class="fu">c</span>(<span class="st">&quot;linear&quot;</span>, <span class="st">&quot;step&quot;</span>), <span class="at">lty =</span> <span class="dv">1</span><span class="sc">:</span><span class="dv">2</span>, <span class="at">bty =</span> <span class="st">&quot;n&quot;</span>)</span></code></pre></div>
+<p><img src="data:image/png;base64,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" /><!-- --></p>
+</div>
+<div id="nominal-requirements-across-states" class="section level3">
+<h3>Nominal requirements across states</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>cols <span class="ot">&lt;-</span> <span class="fu">c</span>(<span class="at">CA =</span> <span class="st">&quot;#1b9e77&quot;</span>, <span class="at">OR =</span> <span class="st">&quot;#d95f02&quot;</span>, <span class="at">WA =</span> <span class="st">&quot;#7570b3&quot;</span>, <span class="at">NC =</span> <span class="st">&quot;#e7298a&quot;</span>, <span class="at">MA =</span> <span class="st">&quot;#66a61e&quot;</span>)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">plot</span>(<span class="cn">NA</span>, <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">2000</span>, <span class="dv">2030</span>), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="fl">0.65</span>), <span class="at">xlab =</span> <span class="st">&quot;&quot;</span>,</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>     <span class="at">ylab =</span> <span class="st">&quot;Nominal requirement (share of sales)&quot;</span>)</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="cf">for</span> (st <span class="cf">in</span> <span class="fu">names</span>(cols)) {</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  d <span class="ot">&lt;-</span> s[s<span class="sc">$</span>state <span class="sc">==</span> st, ]</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  <span class="fu">lines</span>(d<span class="sc">$</span>year, d<span class="sc">$</span>rps_nominal, <span class="at">col =</span> cols[st], <span class="at">lwd =</span> <span class="dv">2</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>}</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="fu">legend</span>(<span class="st">&quot;topleft&quot;</span>, <span class="fu">names</span>(cols), <span class="at">col =</span> cols, <span class="at">lwd =</span> <span class="dv">2</span>, <span class="at">bty =</span> <span class="st">&quot;n&quot;</span>)</span></code></pre></div>
+<p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAqAAAAGACAMAAABFpiBcAAAAkFBMVEUAAAAAADoAAGYAOjoAOmYAOpAAZmYAZpAAZrYbnnc6AAA6ADo6AGY6OgA6Ojo6kNtmAABmADpmAGZmOgBmZgBmZjpmZmZmkJBmph5mtv91cLOQOgCQOjqQZgCQtpCQ2/+2ZgC225C2/9u2///ZXwLbkDrb25Db/9vb///nKYr/tmb/trb/25D//7b//9v///8p3xB2AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAUPElEQVR4nO2dC3vbthWGlXbeHKebnO4W19vMLdbmqrLx///dCFCUKBIEyQOA+I70vc+TWr4UhOI3uB4cbAwhwGxKV4CQEBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTQUlEBDQQk0FJRAQ0EJNBSUQENBCTRnQfebhqeCtSGkx1HQ98fNffPq43nzw/dy9SHkgkbQ95+7Tl5+RkhBOAYl0FBQAs1Z0PfHrdltNndvBWtDSI+zoNXd2+Hh3lT3BWtDSI+ToO+PT2a/qf9wDk+AuBC0quXcUVACRKeLv39/vHt7f2QXT4DoTpI2n14+nuknQYLLTAQaCkqg6Qha9/F3b9W2WFUIGdKJZvr0srOTpG25yhDS5yTox/PW1IJymYlAcbEOagXlQj1BYtCCVtyMJ0D0x6A7RtQTJC5n8ZvNp5dydSFkANdBCTQUlEBDQQk0x0Nzj5sTXGYiQLAFJdBQUALNRTxofBe/IWQWywWt7t529+bwELVQzwaZzGK5oDaMaW+DRaK2OikomYVE0Cdz+Om7+7PCc8lts1xQGyzy/vWFgpI1EIxBbSBotWUXT9ZAIKjNKVLP5OPW6SkomYVE0FWfS24bCkqgEQiaJLsdBSWzkC3Ux2e3o6BkFrJ10PjsdhSUzEImaHx2OwpKZiHp4mdkt7MGHx4CJ5coKJmFaJI0md3O+fnlpWlu455Lbpssy0wuLU4ziRrbb4oS9ON5c15FqDbbmLIINpkEfXJb9jVjU6kYQfdOyaoZPhy+/JVnT66YPAv1tvXc5WpBj5GoH8+u6N0P/46LTCXQ5BH0/fGH764J3Y/NkvrFfQ7Q+9HW+d9sw1mPhZns+ZrJtdV5vHF2VJ1ecSE/e4Je+mj/BeyY5eR6WShoPbq0saArPnfAZWJSm8KMqUqvmMWCbqEEPTzYTypOk66WpV387nzcbpYVY/tNckEvuvi2OpwmXSuCrc6YFnT5adIh7SRpv3k6yso7m66B4XTYojAetLPM1C4ScJqkHt96jUUiqN1kj80PGr1Q//Fc16DN8twMRYlaxvQUCdps5IQzLLvNyNA4NapBdrlNajfPySM4TVKMd7W7RXbs2BI61blr98f3YxvlDBYhDUE9pfGglkDAcuuwyRQsQq6GsJ0mUwvaCbLLESxCroVJPTONQdmCkhnM0DPXLP5kL8egZIRZemZbB21ziI4OAyjoTTMxM+qgcKGeaGe+nkoFdWMMO4hol1u3aSpFVmCJnUanoG6Ea3NHtIEjewaLaGGhnioFdcdFm7C7o6CMqdfBYjuNSkHbnDu7u7fWTN68rACJnjJB6yn63Vu1Xfqo4HNfA1z+5ClgeX86nc8WFB+RnUa2UO+u4448Z9F7bsjPgaDHAefhoY0H5dXg4MgaT4dsq9PuD5XKzXQpKAPq8YnQUxosYgUtld1u0MW7+TxBJcZOE9OCxk1MUk6SRvdTSXEi9YwYg0aO++KPfHSWmSqe+IAkqm8/IpzFFz3yMViot+kgo2pDMpBCT5XroBdbnU13v2Mnj0YSO01MwPJKzyUaSaVnzJGPlZ5L9JFOT9kkKcUJSgp6taTUU9aCLkl9E/1cooo0M6MOKidJBJTkelJQko70dhrpLR/iLj5F8jACSRY9Zfck3b3t7jtpZ/I+d0CzxdqsfLY7SVwGLU0mPWWTpK3Z22imQnvxTRRV9Tf7+CZwhBd9lCabntJ10MNP392fFZ47wDXd71//ZQ9+NKc/eNFHWTLqKd1JsklsSwnqWs393f+en46tKS/6KEpWPUVjUGtFtU3cxf8SoPejx0uY7AcXeceLPsqRYV2ph2SZqdainsnHDft6zw352Rd0b+NAn9oPvOijHPn1VLkOWg883RDjy4sbgvKij0KsYKdRKWjdbtpVhOMHXvRRhnX0FAk6md476XM9VFt3D2h1v+vGLHOatCJr6SlbqC8dzbT/gxt77n/356fzbaCcJq3HenpKF+pXfK6Hw5/c8ufhwTrJiz7WZk09dQYsHy/idh940cfKrKunbKE+xWiPwSIaWWNdqYdgDBoZJrLwuQSGAnouFvQUTs+I+lujhJ1G5TooKUAhPSkomUMxPYUR9Vu7fROXzIOC6qGgntKIept3poqazFNQLRTVU7oOam8tmHE8PjDfp6A6KKynVFC7KB5IYDtjri8X9OO5KbI6rtaHrgsjURRZV+oh6eLvbTa5YHTGMWNnlha0VrI5KWe1bB7E9Is5QNBTeuz4dH3BGE1CxEyC/ui24qvzRudx75MkBMJOk3GZybZqCwT9NcDlT9b/NJpou87J0t+4DZ8WFD1zroPuNtv5gob8HArq4lWq8zVJJC04ei7f6vy521Zdftbn8PBjni7+vs2Rz5NIOUDSc3kLWg9Aj61WPVmZWGiqfyKToPboMwXNApaesvygKQ4BxQlqF2HZxWcATc/8e/Fjq6WRgppq250k8brjFGCsK/VYOVgkQXa7RtDDlz9ymSkpRfX81uD5jr5oplNGu9NC/cczF+pjKWfntw6eb6sV9Hg3kttVZfsZSRk9J9RsyCTo5Nl5BovgUFjP8I8JgkW+Nv1pKJrpdLHW6DWaFBSFgnrO+UG5oIFops5dX2M58CgoBuB6Lhe0Os/Dt6M/2zk6P9bOUlAE4PWMaUEDsAXVQKl1pSV65pokne7q5hgUFR16Zstu18bUjy4AUdCilFr2XNS7O/Rlt6v/fWzdi/1Rf15CsxQ9emrMblcL2orpPvISmoVo0lNjdruP59+7adr7z39prvTiJTRL0KUnTna7bwEuf7J+frU19i6Ff1pBeQnNEgrOjER6CuNB02e3C/k5FNTlpm8C7ngJzQL06Snr4stmt6sFtXeIvX99cYLyEpqZlFxXmmHnq8XzdZXRTMdrkpqDx1vD7MrTIOv5esLzTZWCuovmts3BY15CMwPcvj0op0UiaN3J183Xdu7/GffcAVbQw0//+cdL5+AxL6EJgarnlJsOySTp08su+kRl7KnOv9fD0FpQXkIzCWjfPkdOi2SZqblINhBut6S4xbhGs7KHn6tmGGrhJTR+MIeec+W0yBbqraAz0i+meO6A5tjxxuUW+S8voQnwGVLPJXaamBa0ijoJxGCRzBSzM6TnQjkt4jHorlTiBjKDcmeIx/UU2GnEs/jNJnJWQkHzUfKE+4ieMjkt+tZBSZByXbsZ01Nup6Gg10VRO729e5ScFlmGZd40B0hZO316RttpZLP4FIk8KGhaCts51DOFnJaVA5YTJA8jQ0rnpevpOWsPcyayddAVn0umKG3nhZ6TwR9LEYxBD18S7HtT0DSU7tq7eiaX0yIR9IGTJAzK23nSM4ebDpQzSWQpAHa2C5+55LToO9VJDIidTs+cclo4SVIIhJ1N757XTsNJkj4w7Dzrmfk5+k513jQYXftZz/xP4l68HkDsfH1t9FznaRRUCRB2ugFnTBqG5eg71XmLINh5nK2vq6fGU523R3k7T8vwa+up8VTnjVHczu4e0ep6ajzVeUsU7tp7m+sF9OSpTmDK2jmI/Fi/d3fwVCckn4va6Yn8KKQnT3UigmFn92vF9OQ6KBp4csbln42GwSJAwNpZTM9s4Xa7NmXn2GIUBe2DJ2d5O41skjS9vmSzITY5OynoHACbztJde0uWaKZmFODOJ1PQSYraORZvjGGnyTRJakcB1d0bBQ1SUs7xM24IXXtLFkFP86jqnoKOU9DOwAFMJDtNrmWmVst6OEBB/QDI6fkemJ1msaDvj9tZEfXtPtPHMwUdUq7pDMkJaKfhQv36lLIz0Ks7EO00FHRdUOVEtdPkPzR3pZOkzxGsXNUpN0G79hZxCyoLB9Wf3S5GzZXlfJ1sOA24nSami6+iMuBoFLRgM7iU11lywttpYgS9pYj661PTqLDTxAgaPJP08TwxTtUjqBo3X+e7aZCnRZeIBQ3e37rbbJsX+/aF+Lkl0aLmgmazQYudJmYWHziS1AkZ3Y38GLygSuRcqqbR0rW3ZA0WMeMjVWhBVbi5rEdv0WWnyR0soq4F1THgFKlpFNppohbqA3Og05FPRWNQFTN1qZpGp51GFlHv7AsfO54cqCIJqk5NQWI5nXYa2aG5xsyxzjvxczOjzU1RAWrtNKIu/mtzIl79Qv0tqGnUdu0t8hZUdeobeDkje/QW5XYaaeob0xzcXOO56dHkZlRB+u00EalvIm+ULSIo+oAzmZqmY+cvivC8j1sJWFYwU0/mpulOi0o7twjPO7l+QRWoaVo705TV7dn9v3VFXHOO+s863DRJ9bwceKr381pz1KtR0ySy81uX01f1+3l9Oeo1qWmJ1PPbgM43r8DP68pRr8zNODvHvWy5Bj+vJke9NjUtYj0nxDwy5uevuHhqew056jXKedRz6f80T03HiJ+lHQziqa/2HPUq3ZQ0nlP9eR+vn6Ma4KJ8HVSjnIv1XKimw+enQj3V56jXJ+ciOyVqOoZ+qrTTZMtRn+65YdQJOlfPpT36JQM/teqZK0d9wucGUebnPDuj1HT0/NRrp8mfPCz6uUFUCTqtp0DNiPmxDlaeJKVNHqbJz7Cd0h79yu00ymfxagQNNZ4RPbpXvqvYPzqjWVAtfo7pOa1mOHrS+jkzqlIvFDQ3Pjtn9ugiPa/LT82CqvBzoGf8ZmWD9rHlXChoRi779qWDzZCft6KnZkHh/TzrKZqj00/H4nuSphMzpX3uKOCCNnbKN4Qm/IytnhrUtqDYfr6+xu1Vhvy8oebTUNAMRKrpoJ8tAkHbbr5oF4/pZwI1HeN+3pieIkHtJdv35vBQNKIeTdCumuIjcNe/cbkcSbDI1uztqc6SZ5KA/Lzo0WNOaFJPH7J40MNP392fFZ7rB0PQix498vxwx75r2wyKQhZRb3OElhS0uJ+DwWY6Pa8t2iMSwRjUZmyotkW7+IKC+ufocblBLvpu+nmBZJmpurcz+bi4+ihBC/k5PkePS11zMbSkn5eoXAddXdCJ5aPo5vP8Gf3soVHQ1fz81sP/U8kGn4Z+DhEIOnlRbNLnesguaF/M4Kp79MpS53P6OUCyUD/DzJy3HSf3c+jjgt2gMT3nrWoOYo7TvrMrQLZQP0XW245TCTru5YJtyhE/hXrSzwFZEjdkvasz2s8YH/v4/bzJLZ9MSBbqAxfFN2S97XipoCnayTG8flLPlEgyi0wmXszZgk75Gei404l5xOcn9UxLnswiGW87HhF0DR/7jPmZ7YG3SKZ10Gy3Hff9XNHHHr7lJeqZHG0L9WdBC3nZ4vGTvXsGlAna+FlSzCPUcyUWn+rcLstuN3ZZjf+5M2Y4Z+auNa7H3L9LMh+o7HaK3fyVeuZBWRdPbg2tpzrJjSDZSZoRSp8zWITcEnkuUcgaLEJuiSzX0GQNFiE3hWAMevgydclc1mARclNIBH2YmiSxBSWpyBJuNydYhJBZLBZ01k1zk8Ei4WekRE+hiqoK+P6XTJKin3GbhSqqKuD7XzJJin/GTRaqqKqA739RwHLsM26zUEVVBXz/a0y79fxdAv6C9BdKQcELVVRVwPff+Z/dQuinDANRPX+XgL8g/YWmErRZ29xNnu2MecZNFqqoqoDvf7DMFJcfNPyM2yxUUVUB3/9goX5sl52QEqzRghIiZo0xKCFi1pjFEyKG8XEEGgpKoGkTN5wD9TiLJ0D0W9BqLBSZkBJcClq3pJzEEyQuBN2zfydgdAXdLTzKQUh2zoJ+PHP4SeDoRtRz+EngaAVNOPx0CZy2TaHHnanhi4SFNmtk04emZxVq2vvIxTUNlZqyqt7HJCtUXlNfxXby3/9R0J2sLv761VVw5e3rF/aP50XKQsWn/TyF2t+M+5cqrmmw1IRV9T4mXaHyI5Seitl0x9Lff/qF+sODHSrUdWrio6p7M3yRslB5gOCwUPdP3BYnr2mo1JRV9T0mXaERUZfDUt0lhjYxiKSqubY6638np5oOX6Qs1OziGv9uoTaky/1qYmvqLzVpVUe+kqbQ2JoOS7WCSqqaS9CqVsj1Envfi5SFmupP7ZgnulDTfoitqb/U1FX1fSVNobE1HZa6q62XVDWToDa4tBls1P8dvkhZ6PujXb2ttilq6r5g//4iazpSauqqer6SqNDImg5K3TvbJVXNI+i+HSOnFHSk0OM3hS3IZaGnkqJ/695Sk1d18JVUhcbV1Fcxm8EbRtAmOD9xFz9WaPPdZngTW6hpP8T1m2OlJq6q5zGpCo2qqb9idlQK0sUfM4WnnSSNFtp8W7Ys0i/UfhI/SRotNW1VfY9JVWhMTUcqVn8KMklqjzWlXGYKFNq8a1ELMijUtCVF1DRQatKqeh+TqtCImg5LPRWGscx0eNgeXyVcqA8V6t6wZDzvKdScejrxQn2o1IRV9T8mWaHimvoqVtUzLieneKE+Jbtmvd/tIAy2unbCXblgoVX9HclgyVfoqdmQ1jRcarqq+h+TrlBpTb0VOxW2vKo8k0SgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoKGgBBoKSqChoAQaCkqgoaAEGgpKoPk/EAvDKcFoBrEAAAAASUVORK5CYII=" /><!-- --></p>
+</div>
+<div id="incremental-requirement" class="section level3">
+<h3>Incremental requirement</h3>
+<p>The incremental measure subtracts what the state already produced
+when it enacted the standard, separating new pressure from existing
+renewables. <code>build_panel()</code> fills the baseline from EIA
+generation data: the renewable share in the enactment year (or the first
+later year with data), measured the same way as the target. For New
+York, whose targets count existing hydro, the baseline includes hydro
+(about 19% in 2004, close to the 19.3% written into its RPS order);
+elsewhere it is the non-hydro share. A generation-based baseline is a
+weak guide for states that import most of their electricity, such as
+Vermont. You can always pass your own baseline:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a>base <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">state =</span> <span class="fu">c</span>(<span class="st">&quot;CA&quot;</span>, <span class="st">&quot;OR&quot;</span>), <span class="at">baseline_share =</span> <span class="fu">c</span>(<span class="fl">0.11</span>, <span class="fl">0.03</span>))</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>inc <span class="ot">&lt;-</span> <span class="fu">rps_stringency</span>(<span class="fu">c</span>(<span class="dv">2010</span>, <span class="dv">2020</span>, <span class="dv">2030</span>), <span class="fu">c</span>(<span class="st">&quot;CA&quot;</span>, <span class="st">&quot;OR&quot;</span>),</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>                      <span class="at">method =</span> <span class="fu">c</span>(<span class="st">&quot;coverage_adjusted&quot;</span>, <span class="st">&quot;incremental&quot;</span>),</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>                      <span class="at">baseline =</span> base)</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>inc</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;   state year rps_coverage_adj rps_incremental rps_baseline_share</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt; 1    CA 2010          0.19700         0.08700               0.11</span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; 2    CA 2020          0.32505         0.21505               0.11</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; 3    CA 2030          0.59100         0.48100               0.11</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; 4    OR 2010          0.00000         0.00000               0.03</span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; 5    OR 2020          0.16160         0.13160               0.03</span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; 6    OR 2030          0.28280         0.25280               0.03</span></span></code></pre></div>
+<p><code>OR</code> has <code>NA</code> coverage-adjusted and incremental
+values because its coverage share is not yet coded.</p>
+</div>
+<div id="capacity-based-standards-texas-and-iowa" class="section level3">
+<h3>Capacity-based standards (Texas and Iowa)</h3>
+<p>Texas and Iowa set their standards in megawatts rather than as a
+share of sales. <code>rps_stringency()</code> converts them, like
+Berkeley Lab does, into the share of covered sales the capacity would
+supply: <code>MW x capacity factor x 8,760 hours / covered sales</code>.
+The capacity factor defaults to 0.33 (typical of wind) and can be
+changed. <code>build_panel()</code> supplies retail sales automatically;
+with <code>rps_stringency()</code> you pass them:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>tx_sales <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(<span class="at">state =</span> <span class="st">&quot;TX&quot;</span>, <span class="at">year =</span> <span class="fu">c</span>(<span class="dv">2010</span>, <span class="dv">2015</span>), <span class="at">sales_gwh =</span> <span class="fu">c</span>(<span class="dv">358000</span>, <span class="dv">380000</span>))</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">rps_stringency</span>(<span class="fu">c</span>(<span class="dv">2010</span>, <span class="dv">2015</span>), <span class="st">&quot;TX&quot;</span>, <span class="at">method =</span> <span class="st">&quot;nominal&quot;</span>, <span class="at">sales =</span> tx_sales)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt;   state year rps_nominal</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt; 1    TX 2010  0.04019296</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; 2    TX 2015  0.05909026</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="fu">rps_stringency</span>(<span class="fu">c</span>(<span class="dv">2010</span>, <span class="dv">2015</span>), <span class="st">&quot;TX&quot;</span>, <span class="at">method =</span> <span class="st">&quot;nominal&quot;</span>, <span class="at">sales =</span> tx_sales,</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>               <span class="at">capacity_factor =</span> <span class="fl">0.4</span>)</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt;   state year rps_nominal</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; 1    TX 2010  0.04871874</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; 2    TX 2015  0.07162456</span></span></code></pre></div>
+</div>
+</div>
+<div id="a-template-for-yin-and-powers-2010-style-regressions" class="section level2">
+<h2>A template for Yin and Powers (2010)-style regressions</h2>
+<p>Yin and Powers (2010) regress the non-hydro renewable share of
+generation on the incremental requirement with state and year fixed
+effects. The template below shows the workflow; it is not a replication,
+because their sample, coding and controls differ from the bundled
+starter coding.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">library</span>(fixest)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">build_panel</span>(<span class="at">years =</span> <span class="dv">2001</span><span class="sc">:</span><span class="dv">2022</span>,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>                 <span class="at">vars =</span> <span class="fu">c</span>(<span class="st">&quot;re_share_nonhydro&quot;</span>, <span class="st">&quot;rps_incremental&quot;</span>, <span class="st">&quot;rps_adoption&quot;</span>,</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>                          <span class="st">&quot;gdp_real_pc&quot;</span>, <span class="st">&quot;elec_price_real&quot;</span>))</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="fu">feols</span>(re_share_nonhydro <span class="sc">~</span> rps_incremental <span class="sc">+</span> <span class="fu">log</span>(gdp_real_pc) <span class="sc">+</span> elec_price_real <span class="sc">|</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>        state <span class="sc">+</span> year,</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>      <span class="at">data =</span> <span class="fu">as_pdata</span>(p, <span class="st">&quot;fixest&quot;</span>), <span class="at">cluster =</span> <span class="sc">~</span>state)</span></code></pre></div>
+</div>
+<div id="reference" class="section level2">
+<h2>Reference</h2>
+<p>Yin, H., &amp; Powers, N. (2010). Do state renewable portfolio
+standards promote in-state renewable generation? <em>Energy Policy</em>,
+38(2), 1140-1149.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
